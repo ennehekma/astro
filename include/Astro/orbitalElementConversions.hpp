@@ -17,7 +17,7 @@
 #include <vector>
 
 #include <SML/sml.hpp>
-
+ 
 namespace astro
 {
 
@@ -486,12 +486,82 @@ Real convertEccentricAnomalyToMeanAnomaly( const Real eccentricAnomaly, const Re
 
     // Check if orbit is hyperbolic and compute mean anomaly.
     else if ( eccentricity > 1.0 )
-    {
+    {    //
         meanAnomaly
             = convertHyperbolicEccentricAnomalyToMeanAnomaly( eccentricAnomaly, eccentricity );
     }
 
     return meanAnomaly;
+}
+
+//! Convert Keplerian elements to Cartesian elements.
+template< typename Real, typename Vector6 >
+Vector6 convertKeplerianToCartesianElements(
+    const Vector6& keplerianElements, const Real gravitationalParameter, const Real tolerance )
+{
+    // Check that the Keplerian elements vector contains exactly 6 elemenets and otherwise throw
+    // and error.
+    if ( keplerianElements.size( ) != 6 )
+    {
+        throw std::runtime_error(
+            "ERROR: Keplerian elements vector has more or less than 6 elements!" );
+    }
+
+    // Define and store keplerianElements
+
+    Vector6 cartesianElements = keplerianElements;
+
+    // Compute eccentric anomaly from Kepler's equation
+    const Real precision = 1*10^(-5);
+    Real eccentricAnomaly = keplerianElements[meanAnomalyIndex];
+    Real eccentricAnomaly0 = eccentricAnomaly;
+    Real counter = 1;
+    while(std::abs(eccentricAnomaly0-eccentricAnomaly)>precision )
+        {
+        eccentricAnomaly0 = eccentricAnomaly;
+        eccentricAnomaly = eccentricAnomaly+(keplerianElements[meanAnomalyIndex]+ keplerianElements[ eccentricityIndex ]*std::sin(eccentricAnomaly)-eccentricAnomaly)/(1- keplerianElements[ eccentricityIndex ]*std::cos(eccentricAnomaly));
+        counter++;
+        if (counter==50)
+        {
+            break;
+        }
+        }  
+    
+    // Compute true anomaly with eccentric anomaly
+    Real x = std::sqrt(1+keplerianElements[eccentricityIndex])*std::sin(eccentricAnomaly/2);
+    Real y = std::sqrt(1-keplerianElements[eccentricityIndex])*std::cos(eccentricAnomaly/2);
+    Real trueAnomaly = 2 * std::atan2(x,y);
+    
+    // Compute radius with eccentric anomaly
+    Real radius = keplerianElements[ semiMajorAxisIndex ]*(1- keplerianElements[ eccentricityIndex] *std::cos(eccentricAnomaly));
+  
+    // Compute ksi and eta from radius and 
+    Real ksi = radius * std::cos(trueAnomaly);
+    Real eta = radius * std::sin(trueAnomaly);
+
+    // Compute variables li, mi and ni
+    Real l1 = std::cos(keplerianElements[longitudeOfAscendingNodeIndex])*std::cos(keplerianElements[argumentOfPeriapsisIndex])-std::sin(keplerianElements[longitudeOfAscendingNodeIndex])*std::sin(keplerianElements[argumentOfPeriapsisIndex])*std::cos(keplerianElements[inclinationIndex]);
+    Real l2 = -std::cos(keplerianElements[longitudeOfAscendingNodeIndex])*std::sin(keplerianElements[argumentOfPeriapsisIndex])-std::sin(keplerianElements[longitudeOfAscendingNodeIndex])*std::cos(keplerianElements[argumentOfPeriapsisIndex])*std::cos(keplerianElements[inclinationIndex]);
+    Real m1 = std::sin(keplerianElements[longitudeOfAscendingNodeIndex])*std::cos(keplerianElements[argumentOfPeriapsisIndex])+std::cos(keplerianElements[longitudeOfAscendingNodeIndex])*std::sin(keplerianElements[argumentOfPeriapsisIndex])*std::cos(keplerianElements[inclinationIndex]);
+    Real m2 = -std::sin(keplerianElements[longitudeOfAscendingNodeIndex])*std::sin(keplerianElements[argumentOfPeriapsisIndex])+std::cos(keplerianElements[longitudeOfAscendingNodeIndex])*std::cos(keplerianElements[argumentOfPeriapsisIndex])*std::cos(keplerianElements[inclinationIndex]);
+    Real n1 = std::sin(keplerianElements[argumentOfPeriapsisIndex])*std::sin(keplerianElements[inclinationIndex]);
+    Real n2 = std::cos(keplerianElements[argumentOfPeriapsisIndex])*std::sin(keplerianElements[inclinationIndex]);
+
+    // Compute H
+    Real H = std::sqrt(gravitationalParameter*keplerianElements[ semiMajorAxisIndex ]*(1-keplerianElements[ eccentricityIndex]*keplerianElements[ eccentricityIndex]));
+
+
+    // Check for certain values, temporary
+    cartesianElements[xPositionIndex] = ksi*l1+eta*l2;
+    cartesianElements[yPositionIndex] = ksi*m1+eta*m2;
+    cartesianElements[zPositionIndex] = ksi*n1+eta*n2;
+    cartesianElements[xVelocityIndex] = (gravitationalParameter/H)*((-l1)*std::sin(trueAnomaly)+(l2)*(keplerianElements[ eccentricityIndex]+std::cos(trueAnomaly)));
+    cartesianElements[yVelocityIndex] = (gravitationalParameter/H)*((-m1)*std::sin(trueAnomaly)+(m2)*(keplerianElements[ eccentricityIndex]+std::cos(trueAnomaly)));
+    cartesianElements[zVelocityIndex] = (gravitationalParameter/H)*((-n1)*std::sin(trueAnomaly)+(n2)*(keplerianElements[ eccentricityIndex]+std::cos(trueAnomaly)));
+
+    // cartesianElements[zPositionIndex] = test;//sml::convertRadiansToDegrees(trueAnomaly);
+
+    return cartesianElements;
 }
 
 } // namespace astro
